@@ -22,6 +22,16 @@ type Options struct {
 	Debug   bool
 }
 
+type Identity struct {
+	VendorID     uint16 `json:"vendor_id"`
+	DeviceType   uint16 `json:"device_type"`
+	ProductCode  uint16 `json:"product_code"`
+	Revision     string `json:"revision"`
+	Status       uint16 `json:"status"`
+	SerialNumber uint32 `json:"serial_number"`
+	ProductName  string `json:"product_name"`
+}
+
 type Program struct {
 	Name string `json:"name"`
 	ID   uint32 `json:"id"`
@@ -38,6 +48,7 @@ type Tag struct {
 type Client interface {
 	Connect() error
 	Disconnect() error
+	Identity() (Identity, error)
 	Programs() ([]Program, error)
 	Tags() ([]Tag, error)
 	Read(tag string, valueType string, elements uint16) (any, string, error)
