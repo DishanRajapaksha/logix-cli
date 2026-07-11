@@ -52,6 +52,7 @@ func TestWritablePointRequiresExplicitType(t *testing.T) {
 func TestPointDefaultsTypeAndElements(t *testing.T) {
 	cfg := Starter()
 	cfg.Points = []Point{{Name: "counter", Tag: "Counter"}}
+	cfg.Groups = nil
 	if err := cfg.Validate(); err != nil {
 		t.Fatal(err)
 	}
