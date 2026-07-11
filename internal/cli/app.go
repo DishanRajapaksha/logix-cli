@@ -67,18 +67,28 @@ func (a *App) Run(args []string) int {
 		err = a.initConfig(args[1:])
 	case "validate-config":
 		err = a.validateConfig(args[1:])
-	case "test-connection", "status":
+	case "test-connection":
 		err = a.testConnection(args[1:])
+	case "status":
+		err = a.status(args[1:])
+	case "identify":
+		err = a.identify(args[1:])
 	case "programs":
 		err = a.programs(args[1:])
 	case "tags":
 		err = a.tags(args[1:])
 	case "read":
 		err = a.read(args[1:])
+	case "read-multi":
+		err = a.readMulti(args[1:])
 	case "write":
 		err = a.write(args[1:])
+	case "write-multi":
+		err = a.writeMulti(args[1:])
 	case "watch":
 		err = a.watch(args[1:])
+	case "watch-multi":
+		err = a.watchMulti(args[1:])
 	case "completions":
 		err = a.completions(args[1:])
 	default:
@@ -131,11 +141,16 @@ Usage:
   logix-cli init-config
   logix-cli validate-config --profile local
   logix-cli test-connection --address 192.168.1.10
+  logix-cli status --format json
+  logix-cli identify
   logix-cli programs --format json
   logix-cli tags --filter Motor --limit 50
   logix-cli read Motor.Speed --type real
+  logix-cli read-multi --item Motor.Speed=real --item Counter=dint
   logix-cli write Motor.Enable --type bool --value true --yes
+  logix-cli write-multi --set Motor.Enable=bool:true --set Recipe=dint:12 --yes
   logix-cli watch Motor.Speed --type real --interval 1s --format jsonl
+  logix-cli watch-multi --item Motor.Speed=real --item Counter=dint --format jsonl
   logix-cli completions zsh
   logix-cli version
 
@@ -143,12 +158,16 @@ Commands:
   init-config       Write a starter YAML config file
   validate-config  Validate local config without connecting
   test-connection  Open and close a CIP connection
-  status           Alias for test-connection
+  status           Read controller product, revision, and Identity status
+  identify         Read the complete CIP Identity object
   programs         List controller programs
   tags             List controller and program-scoped tags
-  read             Read a tag, with optional type detection
-  write            Write a tag; dry-run unless --yes is supplied
-  watch            Poll a tag repeatedly
+  read             Read one tag, with optional type detection
+  read-multi       Read several typed tags over one connection
+  write            Write one tag; dry-run unless --yes is supplied
+  write-multi      Write several typed tags; dry-run unless --yes is supplied
+  watch            Poll one tag repeatedly
+  watch-multi      Poll several typed tags repeatedly
   completions      Generate Bash or Zsh completion scripts
   version          Print version information
 
@@ -238,7 +257,7 @@ func commandTakesTag(command string) bool {
 
 func commandSupportsGlobals(command string) bool {
 	switch command {
-	case "validate-config", "test-connection", "status", "programs", "tags", "read", "write", "watch":
+	case "validate-config", "test-connection", "status", "identify", "programs", "tags", "read", "read-multi", "write", "write-multi", "watch", "watch-multi":
 		return true
 	default:
 		return false
