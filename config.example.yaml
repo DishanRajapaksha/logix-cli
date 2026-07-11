@@ -10,3 +10,16 @@ profiles:
     port: 44818
     path: ""
     timeout: 5s
+points:
+  - name: motor_speed
+    tag: Motor.Speed
+    type: real
+    elements: 1
+    unit: rpm
+    description: Motor shaft speed
+  - name: motor_enabled
+    tag: Motor.Enable
+    type: bool
+    elements: 1
+    writable: true
+    description: Motor enable command
