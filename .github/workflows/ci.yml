@@ -20,8 +20,19 @@ jobs:
           go-version: '1.23.x'
           cache: true
       - name: Migrate configuration
+        id: migrate_config
         if: github.event_name == 'pull_request' && github.head_ref == 'agent/point-groups-and-controls'
-        run: python scripts/migrate_point_groups_config.py
+        continue-on-error: true
+        run: python scripts/migrate_point_groups_config.py > config-migration.log 2>&1
+      - name: Upload configuration migration log
+        if: always() && github.event_name == 'pull_request' && github.head_ref == 'agent/point-groups-and-controls'
+        uses: actions/upload-artifact@v4
+        with:
+          name: config-migration-log
+          path: config-migration.log
+      - name: Check configuration migration
+        if: steps.migrate_config.outcome == 'failure'
+        run: exit 1
       - name: Migrate point commands
         if: github.event_name == 'pull_request' && github.head_ref == 'agent/point-groups-and-controls'
         run: python scripts/migrate_point_groups_point.py
