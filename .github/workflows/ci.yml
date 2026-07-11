@@ -23,7 +23,12 @@ jobs:
         id: migrate_config
         if: github.event_name == 'pull_request' && github.head_ref == 'agent/point-groups-and-controls'
         continue-on-error: true
-        run: python scripts/migrate_point_groups_config.py > config-migration.log 2>&1
+        run: |
+          {
+            python scripts/migrate_point_groups_example.py
+            sed -i '/^replace_once("config.example.yaml"/d' scripts/migrate_point_groups_config.py
+            python scripts/migrate_point_groups_config.py
+          } > config-migration.log 2>&1
       - name: Upload configuration migration log
         if: always() && github.event_name == 'pull_request' && github.head_ref == 'agent/point-groups-and-controls'
         uses: actions/upload-artifact@v4
