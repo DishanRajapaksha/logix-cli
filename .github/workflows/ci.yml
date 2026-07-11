@@ -19,15 +19,27 @@ jobs:
         with:
           go-version: '1.23.x'
           cache: true
-      - name: Apply point group migration
+      - name: Migrate configuration
+        if: github.event_name == 'pull_request' && github.head_ref == 'agent/point-groups-and-controls'
+        run: python scripts/migrate_point_groups_config.py
+      - name: Migrate point commands
+        if: github.event_name == 'pull_request' && github.head_ref == 'agent/point-groups-and-controls'
+        run: python scripts/migrate_point_groups_point.py
+      - name: Migrate raw commands
+        if: github.event_name == 'pull_request' && github.head_ref == 'agent/point-groups-and-controls'
+        run: python scripts/migrate_point_groups_client.py
+      - name: Migrate multi commands
+        if: github.event_name == 'pull_request' && github.head_ref == 'agent/point-groups-and-controls'
+        run: python scripts/migrate_point_groups_advanced.py
+      - name: Migrate command surface
+        if: github.event_name == 'pull_request' && github.head_ref == 'agent/point-groups-and-controls'
+        run: python scripts/migrate_point_groups_app.py
+      - name: Migrate documentation
+        if: github.event_name == 'pull_request' && github.head_ref == 'agent/point-groups-and-controls'
+        run: python scripts/migrate_point_groups_docs.py
+      - name: Format and tidy
         if: github.event_name == 'pull_request' && github.head_ref == 'agent/point-groups-and-controls'
         run: |
-          python scripts/migrate_point_groups_config.py
-          python scripts/migrate_point_groups_point.py
-          python scripts/migrate_point_groups_client.py
-          python scripts/migrate_point_groups_advanced.py
-          python scripts/migrate_point_groups_app.py
-          python scripts/migrate_point_groups_docs.py
           gofmt -w internal/cli internal/config
           go mod tidy
       - run: go mod download
