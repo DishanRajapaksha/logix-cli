@@ -77,7 +77,19 @@ jobs:
       - run: go mod download
       - run: test -z "$(gofmt -l .)"
       - run: go vet ./...
-      - run: go test -race ./...
+      - name: Run race tests
+        id: race_tests
+        continue-on-error: true
+        run: go test -race ./... > race-tests.log 2>&1
+      - name: Upload race test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: race-test-log
+          path: race-tests.log
+      - name: Check race tests
+        if: steps.race_tests.outcome == 'failure'
+        run: exit 1
       - run: go build ./...
       - name: Commit verified source
         if: github.event_name == 'pull_request' && github.head_ref == 'agent/point-groups-and-controls'
