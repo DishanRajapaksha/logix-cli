@@ -152,8 +152,12 @@ func (a *App) write(args []string) error {
 		return nil
 	})
 	yes := fs.Bool("yes", false, "transmit the write")
+	dryRun := fs.Bool("dry-run", false, "explicitly keep the write as a dry run")
 	tag, err := parseTagArgs(fs, args, "write")
 	if err != nil {
+		return err
+	}
+	if err := validateWriteMode(*yes, *dryRun); err != nil {
 		return err
 	}
 	if *valueType == "" {
@@ -195,7 +199,8 @@ func (a *App) watch(args []string) error {
 	valueType := fs.String("type", "auto", "tag type or auto")
 	elements := fs.Uint("elements", 1, "number of elements")
 	interval := fs.Duration("interval", time.Second, "poll interval")
-	count := fs.Int("count", 0, "number of samples; 0 means until interrupted")
+	count := fs.Int("count", 0, "number of samples; 0 means unlimited")
+	duration := fs.Duration("duration", 0, "maximum watch duration; 0 means unlimited")
 	tag, err := parseTagArgs(fs, args, "watch")
 	if err != nil {
 		return err
@@ -203,11 +208,8 @@ func (a *App) watch(args []string) error {
 	if *elements == 0 || *elements > 65535 {
 		return fmt.Errorf("elements must be between 1 and 65535")
 	}
-	if *interval <= 0 {
-		return fmt.Errorf("interval must be positive")
-	}
-	if *count < 0 {
-		return fmt.Errorf("count must be non-negative")
+	if err := validateWatchOptions(*interval, *count, *duration); err != nil {
+		return err
 	}
 	stream, err := output.NewStream(a.out, flags.format, []string{"timestamp", "tag", "type", "value"})
 	if err != nil {
@@ -218,6 +220,7 @@ func (a *App) watch(args []string) error {
 		return err
 	}
 	defer closeClient(client)
+	started := time.Now()
 	written := 0
 	for {
 		value, actualType, err := client.Read(tag, *valueType, uint16(*elements))
@@ -230,10 +233,12 @@ func (a *App) watch(args []string) error {
 			return err
 		}
 		written++
-		if *count > 0 && written >= *count {
+		if watchShouldStop(started, written, *count, *duration) {
 			return nil
 		}
-		time.Sleep(*interval)
+		if !waitForNextWatch(started, *duration, *interval) {
+			return nil
+		}
 	}
 }
 

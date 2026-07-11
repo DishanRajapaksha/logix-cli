@@ -19,6 +19,7 @@ type Config struct {
 	DefaultProfile string             `yaml:"default_profile"`
 	Profiles       map[string]Profile `yaml:"profiles"`
 	Points         []Point            `yaml:"points,omitempty"`
+	Groups         []PointGroup       `yaml:"groups,omitempty"`
 }
 
 type Profile struct {
@@ -36,6 +37,12 @@ type Point struct {
 	Unit        string `yaml:"unit,omitempty" json:"unit,omitempty"`
 	Writable    bool   `yaml:"writable,omitempty" json:"writable"`
 	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+}
+
+type PointGroup struct {
+	Name        string   `yaml:"name" json:"name"`
+	Points      []string `yaml:"points" json:"points"`
+	Description string   `yaml:"description,omitempty" json:"description,omitempty"`
 }
 
 func (p *Profile) UnmarshalYAML(node *yaml.Node) error {
@@ -109,6 +116,9 @@ func Starter() Config {
 			{Name: "motor_speed", Tag: "Motor.Speed", Type: "real", Elements: 1, Unit: "rpm"},
 			{Name: "motor_enabled", Tag: "Motor.Enable", Type: "bool", Elements: 1, Writable: true},
 		},
+		Groups: []PointGroup{
+			{Name: "motor", Points: []string{"motor_speed", "motor_enabled"}, Description: "Motor operating values"},
+		},
 	}
 }
 
@@ -160,6 +170,35 @@ func (c Config) Validate() error {
 			return fmt.Errorf("%w: writable point %q requires an explicit type", ErrConfig, point.Name)
 		}
 	}
+	seenGroups := map[string]struct{}{}
+	for _, declared := range c.Groups {
+		group := normaliseGroup(declared)
+		if group.Name == "" {
+			return fmt.Errorf("%w: group name is required", ErrConfig)
+		}
+		key := strings.ToLower(group.Name)
+		if _, ok := seenGroups[key]; ok {
+			return fmt.Errorf("%w: duplicate group name %q", ErrConfig, group.Name)
+		}
+		seenGroups[key] = struct{}{}
+		if len(group.Points) == 0 {
+			return fmt.Errorf("%w: group %q requires at least one point", ErrConfig, group.Name)
+		}
+		seenPoints := map[string]struct{}{}
+		for _, pointName := range group.Points {
+			pointKey := strings.ToLower(pointName)
+			if pointName == "" {
+				return fmt.Errorf("%w: group %q contains an empty point name", ErrConfig, group.Name)
+			}
+			if _, ok := seenPoints[pointKey]; ok {
+				return fmt.Errorf("%w: group %q contains point %q more than once", ErrConfig, group.Name, pointName)
+			}
+			seenPoints[pointKey] = struct{}{}
+			if _, err := c.Point(pointName); err != nil {
+				return fmt.Errorf("%w: group %q references unknown point %q", ErrConfig, group.Name, pointName)
+			}
+		}
+	}
 	return nil
 }
 
@@ -191,6 +230,44 @@ func (c Config) NormalisedPoints() []Point {
 		points[i] = normalisePoint(point)
 	}
 	return points
+}
+
+func (c Config) Group(name string) (PointGroup, error) {
+	name = strings.TrimSpace(name)
+	for _, declared := range c.Groups {
+		group := normaliseGroup(declared)
+		if strings.EqualFold(group.Name, name) {
+			return group, nil
+		}
+	}
+	return PointGroup{}, fmt.Errorf("%w: group %q does not exist", ErrConfig, name)
+}
+
+func (c Config) NormalisedGroups() []PointGroup {
+	groups := make([]PointGroup, len(c.Groups))
+	for i, group := range c.Groups {
+		groups[i] = normaliseGroup(group)
+	}
+	return groups
+}
+
+func (c Config) PointsForGroup(name string) (PointGroup, []Point, error) {
+	group, err := c.Group(name)
+	if err != nil {
+		return PointGroup{}, nil, err
+	}
+	points := make([]Point, 0, len(group.Points))
+	canonicalNames := make([]string, 0, len(group.Points))
+	for _, pointName := range group.Points {
+		point, err := c.Point(pointName)
+		if err != nil {
+			return PointGroup{}, nil, err
+		}
+		points = append(points, point)
+		canonicalNames = append(canonicalNames, point.Name)
+	}
+	group.Points = canonicalNames
+	return group, points, nil
 }
 
 func Load(path string) (Config, error) {
@@ -246,6 +323,17 @@ func normalisePoint(point Point) Point {
 	point.Unit = strings.TrimSpace(point.Unit)
 	point.Description = strings.TrimSpace(point.Description)
 	return point
+}
+
+func normaliseGroup(group PointGroup) PointGroup {
+	group.Name = strings.TrimSpace(group.Name)
+	group.Description = strings.TrimSpace(group.Description)
+	points := make([]string, len(group.Points))
+	for i, point := range group.Points {
+		points[i] = strings.TrimSpace(point)
+	}
+	group.Points = points
+	return group
 }
 
 func validPointType(value string) bool {

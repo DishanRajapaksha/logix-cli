@@ -64,3 +64,30 @@ func TestPointDefaultsTypeAndElements(t *testing.T) {
 		t.Fatalf("unexpected defaults: %#v", point)
 	}
 }
+
+func TestGroupLookupAndPointResolution(t *testing.T) {
+	cfg := Starter()
+	group, points, err := cfg.PointsForGroup("MOTOR")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if group.Name != "motor" || len(points) != 2 || points[0].Name != "motor_speed" {
+		t.Fatalf("group=%#v points=%#v", group, points)
+	}
+}
+
+func TestRejectUnknownPointInGroup(t *testing.T) {
+	cfg := Starter()
+	cfg.Groups = []PointGroup{{Name: "bad", Points: []string{"missing"}}}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected unknown point error")
+	}
+}
+
+func TestRejectDuplicateGroupNamesCaseInsensitively(t *testing.T) {
+	cfg := Starter()
+	cfg.Groups = append(cfg.Groups, PointGroup{Name: "MOTOR", Points: []string{"motor_speed"}})
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected duplicate group error")
+	}
+}

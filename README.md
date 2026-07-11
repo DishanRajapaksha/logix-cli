@@ -10,14 +10,15 @@ The implementation uses [`github.com/danomagnum/gologix`](https://github.com/dan
 
 - YAML profiles with command-line overrides
 - configured named points with type, element count, engineering unit and write policy
+- configured point groups for reusable read, write and watch workflows
 - connection diagnostics
 - CIP Identity and controller-status inspection
 - controller program discovery
 - controller and program-scoped tag discovery
 - typed scalar and array reads
 - heterogeneous multi-tag reads over one connection
-- safety-gated single, multi-tag and named-point writes, with dry-run as the default
-- single, multi-tag and named-point polling with text, JSON Lines or CSV output
+- safety-gated single, multi-tag, named-point and group writes, with dry-run as the default
+- single, multi-tag, named-point and group polling with count or duration bounds
 - table, text, JSON and CSV snapshot output
 - Bash and Zsh completions
 - script-friendly exit codes
@@ -65,6 +66,12 @@ points:
     elements: 1
     writable: true
     description: Motor enable command
+groups:
+  - name: motor
+    points:
+      - motor_speed
+      - motor_enabled
+    description: Motor operating values
 ```
 
 The usual ControlLogix/CompactLogix route is `1,0`, meaning backplane, slot 0. Use an empty path for devices such as some Micro800 controllers:
@@ -90,6 +97,8 @@ Named points are shared by all connection profiles. Their fields are:
 | `description` | no | Human-readable explanation |
 
 Writable points require an explicit type. A configuration that marks an auto-detected point writable is rejected rather than being permitted to improvise against a PLC.
+
+Point groups are shared across profiles and reference named points. Group and point names are matched case-insensitively, while output preserves the canonical configured names. Unknown points, duplicate group names and duplicate entries within a group fail validation.
 
 Configuration is parsed as strict YAML. Unknown fields, duplicate point names, invalid types and malformed durations fail validation instead of being quietly ignored.
 
@@ -172,6 +181,7 @@ Writes are dry-run by default and only work for points declared with `writable: 
 
 ```bash
 logix-cli write-point motor_enabled --value true
+logix-cli write-point motor_enabled --value true --dry-run
 logix-cli write-point motor_enabled --value true --yes
 ```
 
@@ -182,6 +192,37 @@ Poll a point while preserving its point name, underlying tag and engineering uni
 ```bash
 logix-cli watch-point motor_speed --interval 1s
 logix-cli watch-point motor_speed --count 10 --format jsonl
+```
+
+### Use configured point groups
+
+List groups without connecting:
+
+```bash
+logix-cli groups
+logix-cli groups --filter motor --format json
+```
+
+Read every point in a group over one controller connection:
+
+```bash
+logix-cli read-group motor
+logix-cli read-group motor --format json
+```
+
+Write selected points by configured point name. Every target must belong to the group and be declared writable:
+
+```bash
+logix-cli write-group motor --set motor_enabled=true
+logix-cli write-group motor --set motor_enabled=true --yes
+```
+
+Group writes validate the complete set before connecting, are dry-run by default, and are sequential rather than transactional.
+
+Poll the group with one timestamp shared by every point in a cycle:
+
+```bash
+logix-cli watch-group motor --interval 1s --duration 30s --format jsonl
 ```
 
 ### Read a tag
@@ -236,6 +277,7 @@ Writes are dry-run by default:
 
 ```bash
 logix-cli write Motor.Enable --type bool --value true
+logix-cli write Motor.Enable --type bool --value true --dry-run
 ```
 
 Transmit only with `--yes`:
@@ -278,6 +320,7 @@ Multi-tag writes are sequential and **not transactional**. If a later write fail
 
 ```bash
 logix-cli watch Motor.Speed --type real --interval 1s
+logix-cli watch Motor.Speed --type real --duration 30s --format jsonl
 logix-cli watch Motor.Speed --type real --count 10 --format jsonl
 logix-cli watch ProductionCounts[0] --type dint --elements 5 --format csv
 ```
@@ -294,7 +337,9 @@ logix-cli watch-multi \
   --format jsonl
 ```
 
-`--count` counts poll cycles. Each cycle reads every configured item and gives the rows a common timestamp.
+`--count` counts poll cycles. Each cycle reads every configured item and gives the rows a common timestamp. All watch commands also accept `--duration`; whichever bound is reached first stops the stream. A zero count or duration means unlimited.
+
+`--dry-run` may be supplied explicitly to any write command. It cannot be combined with `--yes`.
 
 ## Output contract
 

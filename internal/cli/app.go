@@ -81,24 +81,32 @@ func (a *App) Run(args []string) int {
 		err = a.tags(args[1:])
 	case "points":
 		err = a.points(args[1:])
+	case "groups":
+		err = a.groups(args[1:])
 	case "read":
 		err = a.read(args[1:])
 	case "read-multi":
 		err = a.readMulti(args[1:])
 	case "read-point":
 		err = a.readPoint(args[1:])
+	case "read-group":
+		err = a.readGroup(args[1:])
 	case "write":
 		err = a.write(args[1:])
 	case "write-multi":
 		err = a.writeMulti(args[1:])
 	case "write-point":
 		err = a.writePoint(args[1:])
+	case "write-group":
+		err = a.writeGroup(args[1:])
 	case "watch":
 		err = a.watch(args[1:])
 	case "watch-multi":
 		err = a.watchMulti(args[1:])
 	case "watch-point":
 		err = a.watchPoint(args[1:])
+	case "watch-group":
+		err = a.watchGroup(args[1:])
 	case "completions":
 		err = a.completions(args[1:])
 	default:
@@ -158,15 +166,19 @@ Usage:
   logix-cli programs --format json
   logix-cli tags --filter Motor --limit 50
   logix-cli points --format json
+  logix-cli groups --format json
   logix-cli read Motor.Speed --type real
   logix-cli read-multi --item Motor.Speed=real --item Counter=dint
   logix-cli read-point motor_speed
+  logix-cli read-group motor --format json
   logix-cli write Motor.Enable --type bool --value true --yes
   logix-cli write-multi --set Motor.Enable=bool:true --set Recipe=dint:12 --yes
   logix-cli write-point motor_enabled --value true --yes
-  logix-cli watch Motor.Speed --type real --interval 1s --format jsonl
+  logix-cli write-group motor --set motor_enabled=true --yes
+  logix-cli watch Motor.Speed --type real --interval 1s --duration 30s --format jsonl
   logix-cli watch-multi --item Motor.Speed=real --item Counter=dint --format jsonl
-  logix-cli watch-point motor_speed --format jsonl
+  logix-cli watch-point motor_speed --duration 30s --format jsonl
+  logix-cli watch-group motor --duration 30s --format jsonl
   logix-cli completions zsh
   logix-cli version
 
@@ -179,15 +191,19 @@ Commands:
   programs         List controller programs
   tags             List controller and program-scoped tags
   points           List configured named points
+  groups           List configured point groups
   read             Read one tag, with optional type detection
   read-multi       Read several typed tags over one connection
   read-point       Read a configured named point
+  read-group       Read all points in a configured group
   write            Write one tag; dry-run unless --yes is supplied
   write-multi      Write several typed tags; dry-run unless --yes is supplied
   write-point      Write a configured named point; dry-run unless --yes is supplied
+  write-group      Write selected writable points in a configured group
   watch            Poll one tag repeatedly
   watch-multi      Poll several typed tags repeatedly
   watch-point      Poll a configured named point repeatedly
+  watch-group      Poll all points in a configured group
   completions      Generate Bash or Zsh completion scripts
   version          Print version information
 
@@ -268,7 +284,7 @@ func appendCommandGlobals(args, globals []string) []string {
 
 func commandTakesTag(command string) bool {
 	switch command {
-	case "read", "write", "watch", "read-point", "write-point", "watch-point":
+	case "read", "write", "watch", "read-point", "write-point", "watch-point", "read-group", "write-group", "watch-group":
 		return true
 	default:
 		return false
@@ -277,7 +293,7 @@ func commandTakesTag(command string) bool {
 
 func commandSupportsGlobals(command string) bool {
 	switch command {
-	case "validate-config", "test-connection", "status", "identify", "programs", "tags", "points", "read", "read-multi", "read-point", "write", "write-multi", "write-point", "watch", "watch-multi", "watch-point":
+	case "validate-config", "test-connection", "status", "identify", "programs", "tags", "points", "groups", "read", "read-multi", "read-point", "read-group", "write", "write-multi", "write-point", "write-group", "watch", "watch-multi", "watch-point", "watch-group":
 		return true
 	default:
 		return false

@@ -161,7 +161,11 @@ func (a *App) writeMulti(args []string) error {
 	var rawSets repeatedValue
 	fs.Var(&rawSets, "set", "repeat TAG=TYPE:VALUE")
 	yes := fs.Bool("yes", false, "transmit all writes")
+	dryRun := fs.Bool("dry-run", false, "explicitly keep all writes as a dry run")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := validateWriteMode(*yes, *dryRun); err != nil {
 		return err
 	}
 	if fs.NArg() != 0 {
@@ -216,7 +220,8 @@ func (a *App) watchMulti(args []string) error {
 	var rawItems repeatedValue
 	fs.Var(&rawItems, "item", "repeat TAG[=TYPE[:ELEMENTS]]")
 	interval := fs.Duration("interval", time.Second, "poll interval")
-	count := fs.Int("count", 0, "number of poll cycles; 0 means until interrupted")
+	count := fs.Int("count", 0, "number of poll cycles; 0 means unlimited")
+	duration := fs.Duration("duration", 0, "maximum watch duration; 0 means unlimited")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -226,11 +231,8 @@ func (a *App) watchMulti(args []string) error {
 	if len(rawItems) == 0 {
 		return fmt.Errorf("watch-multi requires at least one --item")
 	}
-	if *interval <= 0 {
-		return fmt.Errorf("interval must be positive")
-	}
-	if *count < 0 {
-		return fmt.Errorf("count must be non-negative")
+	if err := validateWatchOptions(*interval, *count, *duration); err != nil {
+		return err
 	}
 	specs, err := parseReadSpecs(rawItems)
 	if err != nil {
@@ -246,6 +248,7 @@ func (a *App) watchMulti(args []string) error {
 	}
 	defer closeClient(client)
 
+	started := time.Now()
 	cycles := 0
 	for {
 		timestamp := time.Now().UTC().Format(time.RFC3339Nano)
@@ -261,10 +264,12 @@ func (a *App) watchMulti(args []string) error {
 			}
 		}
 		cycles++
-		if *count > 0 && cycles >= *count {
+		if watchShouldStop(started, cycles, *count, *duration) {
 			return nil
 		}
-		time.Sleep(*interval)
+		if !waitForNextWatch(started, *duration, *interval) {
+			return nil
+		}
 	}
 }
 

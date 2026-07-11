@@ -13,6 +13,7 @@ import (
 
 type pointSample struct {
 	Timestamp string `json:"timestamp"`
+	Group     string `json:"group,omitempty"`
 	Point     string `json:"point"`
 	Tag       string `json:"tag"`
 	Type      string `json:"type"`
@@ -83,8 +84,12 @@ func (a *App) writePoint(args []string) error {
 		return nil
 	})
 	yes := fs.Bool("yes", false, "transmit the write")
+	dryRun := fs.Bool("dry-run", false, "explicitly keep the write as a dry run")
 	name, err := parseTagArgs(fs, args, "write-point")
 	if err != nil {
+		return err
+	}
+	if err := validateWriteMode(*yes, *dryRun); err != nil {
 		return err
 	}
 	if !valueSet {
@@ -128,16 +133,14 @@ func (a *App) watchPoint(args []string) error {
 	fs := a.newFlagSet("watch-point")
 	flags := addCommonFlags(fs, false)
 	interval := fs.Duration("interval", time.Second, "poll interval")
-	count := fs.Int("count", 0, "number of samples; 0 means until interrupted")
+	count := fs.Int("count", 0, "number of samples; 0 means unlimited")
+	duration := fs.Duration("duration", 0, "maximum watch duration; 0 means unlimited")
 	name, err := parseTagArgs(fs, args, "watch-point")
 	if err != nil {
 		return err
 	}
-	if *interval <= 0 {
-		return fmt.Errorf("interval must be positive")
-	}
-	if *count < 0 {
-		return fmt.Errorf("count must be non-negative")
+	if err := validateWatchOptions(*interval, *count, *duration); err != nil {
+		return err
 	}
 	point, err := configuredPoint(flags, name)
 	if err != nil {
@@ -152,6 +155,7 @@ func (a *App) watchPoint(args []string) error {
 		return err
 	}
 	defer closeClient(client)
+	started := time.Now()
 	written := 0
 	for {
 		value, actualType, err := client.Read(point.Tag, point.Type, point.Elements)
@@ -164,10 +168,12 @@ func (a *App) watchPoint(args []string) error {
 			return err
 		}
 		written++
-		if *count > 0 && written >= *count {
+		if watchShouldStop(started, written, *count, *duration) {
 			return nil
 		}
-		time.Sleep(*interval)
+		if !waitForNextWatch(started, *duration, *interval) {
+			return nil
+		}
 	}
 }
 
