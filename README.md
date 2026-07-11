@@ -9,14 +9,15 @@ The implementation uses [`github.com/danomagnum/gologix`](https://github.com/dan
 ## Features
 
 - YAML profiles with command-line overrides
+- configured named points with type, element count, engineering unit and write policy
 - connection diagnostics
 - CIP Identity and controller-status inspection
 - controller program discovery
 - controller and program-scoped tag discovery
 - typed scalar and array reads
 - heterogeneous multi-tag reads over one connection
-- safety-gated single and multi-tag writes, with dry-run as the default
-- single and multi-tag polling with text, JSON Lines or CSV output
+- safety-gated single, multi-tag and named-point writes, with dry-run as the default
+- single, multi-tag and named-point polling with text, JSON Lines or CSV output
 - table, text, JSON and CSV snapshot output
 - Bash and Zsh completions
 - script-friendly exit codes
@@ -51,6 +52,19 @@ profiles:
     port: 44818
     path: "1,0"
     timeout: 5s
+points:
+  - name: motor_speed
+    tag: Motor.Speed
+    type: real
+    elements: 1
+    unit: rpm
+    description: Motor shaft speed
+  - name: motor_enabled
+    tag: Motor.Enable
+    type: bool
+    elements: 1
+    writable: true
+    description: Motor enable command
 ```
 
 The usual ControlLogix/CompactLogix route is `1,0`, meaning backplane, slot 0. Use an empty path for devices such as some Micro800 controllers:
@@ -62,6 +76,22 @@ The usual ControlLogix/CompactLogix route is `1,0`, meaning backplane, slot 0. U
     path: ""
     timeout: 5s
 ```
+
+Named points are shared by all connection profiles. Their fields are:
+
+| Field | Required | Meaning |
+|---|---|---|
+| `name` | yes | Stable CLI-facing name, matched case-insensitively |
+| `tag` | yes | Controller or program-scoped Logix tag |
+| `type` | no | Logix type; defaults to `auto` for reads |
+| `elements` | no | Array element count; defaults to `1` |
+| `unit` | no | Engineering unit carried into output |
+| `writable` | no | Allows `write-point`; defaults to `false` |
+| `description` | no | Human-readable explanation |
+
+Writable points require an explicit type. A configuration that marks an auto-detected point writable is rejected rather than being permitted to improvise against a PLC.
+
+Configuration is parsed as strict YAML. Unknown fields, duplicate point names, invalid types and malformed durations fail validation instead of being quietly ignored.
 
 Validate without connecting:
 
@@ -121,6 +151,38 @@ logix-cli tags --program MainProgram --format csv
 ```
 
 Tag discovery can be expensive on large controllers. Use `--filter` and `--limit` to keep the output civilised, although the controller still returns its tag catalogue before local filtering.
+
+### Use configured named points
+
+List the point catalogue without connecting:
+
+```bash
+logix-cli points
+logix-cli points --format json
+```
+
+Read a point using its configured tag, type and element count:
+
+```bash
+logix-cli read-point motor_speed
+logix-cli read-point motor_speed --format json
+```
+
+Writes are dry-run by default and only work for points declared with `writable: true`:
+
+```bash
+logix-cli write-point motor_enabled --value true
+logix-cli write-point motor_enabled --value true --yes
+```
+
+Attempting to write a read-only point returns exit code `7` before a controller connection is opened.
+
+Poll a point while preserving its point name, underlying tag and engineering unit in every row:
+
+```bash
+logix-cli watch-point motor_speed --interval 1s
+logix-cli watch-point motor_speed --count 10 --format jsonl
+```
 
 ### Read a tag
 
