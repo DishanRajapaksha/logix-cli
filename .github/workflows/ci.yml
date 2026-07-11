@@ -48,8 +48,19 @@ jobs:
         if: github.event_name == 'pull_request' && github.head_ref == 'agent/point-groups-and-controls'
         run: python scripts/migrate_point_groups_advanced.py
       - name: Migrate command surface
+        id: migrate_app
         if: github.event_name == 'pull_request' && github.head_ref == 'agent/point-groups-and-controls'
-        run: python scripts/migrate_point_groups_app.py
+        continue-on-error: true
+        run: python scripts/migrate_point_groups_app.py > app-migration.log 2>&1
+      - name: Upload command surface migration log
+        if: always() && github.event_name == 'pull_request' && github.head_ref == 'agent/point-groups-and-controls'
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-migration-log
+          path: app-migration.log
+      - name: Check command surface migration
+        if: steps.migrate_app.outcome == 'failure'
+        run: exit 1
       - name: Migrate documentation
         if: github.event_name == 'pull_request' && github.head_ref == 'agent/point-groups-and-controls'
         run: python scripts/migrate_point_groups_docs.py
