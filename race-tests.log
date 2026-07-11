@@ -1,5 +1,0 @@
-?   	github.com/DishanRajapaksha/logix-cli	[no test files]
-ok  	github.com/DishanRajapaksha/logix-cli/internal/cli	1.057s
-ok  	github.com/DishanRajapaksha/logix-cli/internal/config	1.015s
-ok  	github.com/DishanRajapaksha/logix-cli/internal/logixclient	(cached)
-ok  	github.com/DishanRajapaksha/logix-cli/internal/output	(cached)
