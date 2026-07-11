@@ -3,10 +3,12 @@ package config
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
-	"strconv"
 	"strings"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 var ErrConfig = errors.New("configuration error")
@@ -14,8 +16,9 @@ var ErrConfig = errors.New("configuration error")
 const DefaultPath = "config.yaml"
 
 type Config struct {
-	DefaultProfile string
-	Profiles       map[string]Profile
+	DefaultProfile string             `yaml:"default_profile"`
+	Profiles       map[string]Profile `yaml:"profiles"`
+	Points         []Point            `yaml:"points,omitempty"`
 }
 
 type Profile struct {
@@ -23,6 +26,72 @@ type Profile struct {
 	Port    uint
 	Path    string
 	Timeout time.Duration
+}
+
+type Point struct {
+	Name        string `yaml:"name" json:"name"`
+	Tag         string `yaml:"tag" json:"tag"`
+	Type        string `yaml:"type,omitempty" json:"type"`
+	Elements    uint16 `yaml:"elements,omitempty" json:"elements"`
+	Unit        string `yaml:"unit,omitempty" json:"unit,omitempty"`
+	Writable    bool   `yaml:"writable,omitempty" json:"writable"`
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+}
+
+func (p *Profile) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind != yaml.MappingNode {
+		return fmt.Errorf("profile must be a mapping")
+	}
+	allowed := map[string]struct{}{
+		"address": {}, "port": {}, "path": {}, "timeout": {},
+	}
+	for i := 0; i < len(node.Content); i += 2 {
+		key := node.Content[i].Value
+		if _, ok := allowed[key]; !ok {
+			return fmt.Errorf("unknown profile field %q", key)
+		}
+	}
+	var raw struct {
+		Address string  `yaml:"address"`
+		Port    *uint   `yaml:"port"`
+		Path    *string `yaml:"path"`
+		Timeout string  `yaml:"timeout"`
+	}
+	if err := node.Decode(&raw); err != nil {
+		return err
+	}
+	p.Address = raw.Address
+	p.Port = 44818
+	p.Path = "1,0"
+	p.Timeout = 5 * time.Second
+	if raw.Port != nil {
+		p.Port = *raw.Port
+	}
+	if raw.Path != nil {
+		p.Path = *raw.Path
+	}
+	if raw.Timeout != "" {
+		parsed, err := time.ParseDuration(raw.Timeout)
+		if err != nil {
+			return fmt.Errorf("invalid timeout %q: %w", raw.Timeout, err)
+		}
+		p.Timeout = parsed
+	}
+	return nil
+}
+
+func (p Profile) MarshalYAML() (any, error) {
+	return struct {
+		Address string `yaml:"address"`
+		Port    uint   `yaml:"port"`
+		Path    string `yaml:"path"`
+		Timeout string `yaml:"timeout"`
+	}{
+		Address: p.Address,
+		Port:    p.Port,
+		Path:    p.Path,
+		Timeout: p.Timeout.String(),
+	}, nil
 }
 
 func Starter() Config {
@@ -35,6 +104,10 @@ func Starter() Config {
 				Path:    "1,0",
 				Timeout: 5 * time.Second,
 			},
+		},
+		Points: []Point{
+			{Name: "motor_speed", Tag: "Motor.Speed", Type: "real", Elements: 1, Unit: "rpm"},
+			{Name: "motor_enabled", Tag: "Motor.Enable", Type: "bool", Elements: 1, Writable: true},
 		},
 	}
 }
@@ -63,6 +136,30 @@ func (c Config) Validate() error {
 			return fmt.Errorf("%w: profile %q timeout must be positive", ErrConfig, name)
 		}
 	}
+	seen := map[string]struct{}{}
+	for _, declared := range c.Points {
+		point := normalisePoint(declared)
+		if point.Name == "" {
+			return fmt.Errorf("%w: point name is required", ErrConfig)
+		}
+		key := strings.ToLower(point.Name)
+		if _, ok := seen[key]; ok {
+			return fmt.Errorf("%w: duplicate point name %q", ErrConfig, point.Name)
+		}
+		seen[key] = struct{}{}
+		if point.Tag == "" {
+			return fmt.Errorf("%w: point %q tag is required", ErrConfig, point.Name)
+		}
+		if !validPointType(point.Type) {
+			return fmt.Errorf("%w: point %q has unsupported type %q", ErrConfig, point.Name, point.Type)
+		}
+		if point.Elements == 0 {
+			return fmt.Errorf("%w: point %q elements must be between 1 and 65535", ErrConfig, point.Name)
+		}
+		if point.Writable && point.Type == "auto" {
+			return fmt.Errorf("%w: writable point %q requires an explicit type", ErrConfig, point.Name)
+		}
+	}
 	return nil
 }
 
@@ -75,6 +172,25 @@ func (c Config) Profile(name string) (Profile, string, error) {
 		return Profile{}, "", fmt.Errorf("%w: profile %q does not exist", ErrConfig, name)
 	}
 	return profile, name, nil
+}
+
+func (c Config) Point(name string) (Point, error) {
+	name = strings.TrimSpace(name)
+	for _, declared := range c.Points {
+		point := normalisePoint(declared)
+		if strings.EqualFold(point.Name, name) {
+			return point, nil
+		}
+	}
+	return Point{}, fmt.Errorf("%w: point %q does not exist", ErrConfig, name)
+}
+
+func (c Config) NormalisedPoints() []Point {
+	points := make([]Point, len(c.Points))
+	for i, point := range c.Points {
+		points[i] = normalisePoint(point)
+	}
+	return points
 }
 
 func Load(path string) (Config, error) {
@@ -93,80 +209,50 @@ func Load(path string) (Config, error) {
 }
 
 func Parse(data string) (Config, error) {
-	cfg := Config{Profiles: map[string]Profile{}}
-	var current string
-	for lineNumber, raw := range strings.Split(data, "\n") {
-		line := strings.TrimRight(raw, " \t\r")
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-			continue
+	var cfg Config
+	decoder := yaml.NewDecoder(strings.NewReader(data))
+	decoder.KnownFields(true)
+	if err := decoder.Decode(&cfg); err != nil {
+		return Config{}, fmt.Errorf("%w: parse YAML: %v", ErrConfig, err)
+	}
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		if err == nil {
+			return Config{}, fmt.Errorf("%w: multiple YAML documents are not supported", ErrConfig)
 		}
-		indent := len(line) - len(strings.TrimLeft(line, " "))
-		key, value, ok := strings.Cut(trimmed, ":")
-		if !ok {
-			return Config{}, fmt.Errorf("%w: line %d must contain ':'", ErrConfig, lineNumber+1)
-		}
-		key = strings.TrimSpace(key)
-		value = strings.Trim(strings.TrimSpace(value), "\"")
-
-		switch {
-		case indent == 0 && key == "default_profile":
-			cfg.DefaultProfile = value
-		case indent == 0 && key == "profiles" && value == "":
-			continue
-		case indent == 2 && value == "":
-			current = key
-			cfg.Profiles[current] = Profile{Port: 44818, Path: "1,0", Timeout: 5 * time.Second}
-		case indent == 4 && current != "":
-			profile := cfg.Profiles[current]
-			switch key {
-			case "address":
-				profile.Address = value
-			case "port":
-				parsed, err := strconv.ParseUint(value, 10, 16)
-				if err != nil {
-					return Config{}, fmt.Errorf("%w: line %d invalid port %q", ErrConfig, lineNumber+1, value)
-				}
-				profile.Port = uint(parsed)
-			case "path":
-				profile.Path = value
-			case "timeout":
-				parsed, err := time.ParseDuration(value)
-				if err != nil {
-					return Config{}, fmt.Errorf("%w: line %d invalid timeout %q", ErrConfig, lineNumber+1, value)
-				}
-				profile.Timeout = parsed
-			default:
-				return Config{}, fmt.Errorf("%w: line %d unknown profile field %q", ErrConfig, lineNumber+1, key)
-			}
-			cfg.Profiles[current] = profile
-		default:
-			return Config{}, fmt.Errorf("%w: line %d has unsupported indentation or field", ErrConfig, lineNumber+1)
-		}
+		return Config{}, fmt.Errorf("%w: parse trailing YAML: %v", ErrConfig, err)
 	}
 	return cfg, nil
 }
 
 func Marshal(c Config) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "default_profile: %s\n", c.DefaultProfile)
-	b.WriteString("profiles:\n")
-	order := make([]string, 0, len(c.Profiles))
-	if _, ok := c.Profiles[c.DefaultProfile]; ok {
-		order = append(order, c.DefaultProfile)
+	data, err := yaml.Marshal(c)
+	if err != nil {
+		panic(fmt.Sprintf("marshal configuration: %v", err))
 	}
-	for name := range c.Profiles {
-		if name != c.DefaultProfile {
-			order = append(order, name)
-		}
+	return string(data)
+}
+
+func normalisePoint(point Point) Point {
+	point.Name = strings.TrimSpace(point.Name)
+	point.Tag = strings.TrimSpace(point.Tag)
+	point.Type = strings.ToLower(strings.TrimSpace(point.Type))
+	if point.Type == "" {
+		point.Type = "auto"
 	}
-	for _, name := range order {
-		p := c.Profiles[name]
-		fmt.Fprintf(&b, "  %s:\n", name)
-		fmt.Fprintf(&b, "    address: %s\n", p.Address)
-		fmt.Fprintf(&b, "    port: %d\n", p.Port)
-		fmt.Fprintf(&b, "    path: \"%s\"\n", p.Path)
-		fmt.Fprintf(&b, "    timeout: %s\n", p.Timeout)
+	if point.Elements == 0 {
+		point.Elements = 1
 	}
-	return b.String()
+	point.Unit = strings.TrimSpace(point.Unit)
+	point.Description = strings.TrimSpace(point.Description)
+	return point
+}
+
+func validPointType(value string) bool {
+	switch value {
+	case "auto", "bool", "sint", "int", "dint", "lint", "usint", "uint", "udint", "ulint", "real", "lreal", "string":
+		return true
+	default:
+		return false
+	}
 }
