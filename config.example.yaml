@@ -23,3 +23,9 @@ points:
     elements: 1
     writable: true
     description: Motor enable command
+groups:
+  - name: motor
+    points:
+      - motor_speed
+      - motor_enabled
+    description: Motor operating values
