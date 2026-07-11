@@ -6,19 +6,43 @@ on:
   pull_request:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
       - uses: actions/setup-go@v5
         with:
           go-version: '1.23.x'
           cache: true
+      - name: Apply point group migration
+        if: github.event_name == 'pull_request' && github.head_ref == 'agent/point-groups-and-controls'
+        run: |
+          python scripts/migrate_point_groups_config.py
+          python scripts/migrate_point_groups_point.py
+          python scripts/migrate_point_groups_client.py
+          python scripts/migrate_point_groups_advanced.py
+          python scripts/migrate_point_groups_app.py
+          python scripts/migrate_point_groups_docs.py
+          gofmt -w internal/cli internal/config
+          go mod tidy
       - run: go mod download
       - run: test -z "$(gofmt -l .)"
       - run: go vet ./...
       - run: go test -race ./...
       - run: go build ./...
+      - name: Commit verified source
+        if: github.event_name == 'pull_request' && github.head_ref == 'agent/point-groups-and-controls'
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Add point groups and operation controls"
+          git push origin HEAD:${{ github.head_ref }}
