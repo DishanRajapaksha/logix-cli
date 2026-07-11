@@ -10,11 +10,13 @@ The implementation uses [`github.com/danomagnum/gologix`](https://github.com/dan
 
 - YAML profiles with command-line overrides
 - connection diagnostics
+- CIP Identity and controller-status inspection
 - controller program discovery
 - controller and program-scoped tag discovery
 - typed scalar and array reads
-- safety-gated writes, with dry-run as the default
-- polling with text, JSON Lines or CSV output
+- heterogeneous multi-tag reads over one connection
+- safety-gated single and multi-tag writes, with dry-run as the default
+- single and multi-tag polling with text, JSON Lines or CSV output
 - table, text, JSON and CSV snapshot output
 - Bash and Zsh completions
 - script-friendly exit codes
@@ -78,10 +80,30 @@ logix-cli programs --profile local --format json
 
 ### Test the connection
 
+`test-connection` only verifies that the EtherNet/IP and CIP connection can be opened and closed.
+
 ```bash
 logix-cli test-connection
 logix-cli test-connection --address 192.168.1.10 --path 1,0
 ```
+
+### Inspect status and identity
+
+`status` reads the controller product name, revision and raw status word from the CIP Identity object:
+
+```bash
+logix-cli status
+logix-cli status --format json
+```
+
+`identify` returns the complete identity summary exposed by the CLI:
+
+```bash
+logix-cli identify
+logix-cli identify --format json
+```
+
+The fields are vendor ID, device type, product code, revision, status, serial number and product name. Numeric IDs remain numeric because pretending every vendor-specific value has a trustworthy friendly name would be theatre.
 
 ### List programs
 
@@ -122,6 +144,30 @@ auto, bool, sint, int, dint, lint,
 usint, uint, udint, ulint, real, lreal, string
 ```
 
+### Read several tags
+
+Repeat `--item` using this grammar:
+
+```text
+TAG[=TYPE[:ELEMENTS]]
+```
+
+Examples:
+
+```bash
+logix-cli read-multi \
+  --item Motor.Speed=real \
+  --item Counter=dint \
+  --item ProductionCounts[0]=dint:10
+
+logix-cli read-multi \
+  --item Program:MainProgram.State=dint \
+  --item Program:MainProgram.Message=string \
+  --format json
+```
+
+Omitting the type uses automatic type detection. The command reuses one controller connection but currently performs one tag request per item. It is deliberately honest about this rather than calling a loop a magical atomic batch.
+
 ### Write a tag
 
 Writes are dry-run by default:
@@ -139,13 +185,54 @@ logix-cli write RecipeNumber --type dint --value 12 --yes
 
 The CLI deliberately requires an explicit type for writes. Guessing types while altering a PLC is an inventive way to ruin an afternoon.
 
-### Watch a tag
+### Write several tags
+
+Repeat `--set` using this grammar:
+
+```text
+TAG=TYPE:VALUE
+```
+
+Dry-run the complete set:
+
+```bash
+logix-cli write-multi \
+  --set Motor.Enable=bool:true \
+  --set RecipeNumber=dint:12
+```
+
+Transmit the writes:
+
+```bash
+logix-cli write-multi \
+  --set Motor.Enable=bool:true \
+  --set RecipeNumber=dint:12 \
+  --yes
+```
+
+Multi-tag writes are sequential and **not transactional**. If a later write fails, earlier successful writes remain applied. The error reports how many writes succeeded before the failure. Treat this command as a controlled sequence, not a database transaction wearing a hard hat.
+
+### Watch one tag
 
 ```bash
 logix-cli watch Motor.Speed --type real --interval 1s
 logix-cli watch Motor.Speed --type real --count 10 --format jsonl
 logix-cli watch ProductionCounts[0] --type dint --elements 5 --format csv
 ```
+
+### Watch several tags
+
+`watch-multi` uses the same `--item` grammar as `read-multi`:
+
+```bash
+logix-cli watch-multi \
+  --item Motor.Speed=real \
+  --item Counter=dint \
+  --interval 1s \
+  --format jsonl
+```
+
+`--count` counts poll cycles. Each cycle reads every configured item and gives the rows a common timestamp.
 
 ## Output contract
 
@@ -178,4 +265,4 @@ JSON is rejected for unbounded streams. JSON Lines exists because concatenating 
 
 ## Safety and scope
 
-`logix-cli` is an engineering and diagnostic tool. Confirm the controller, tag and expected data type before transmitting writes. The initial implementation intentionally excludes arbitrary CIP messages, server mode, UDT write construction and I/O adapter behaviour.
+`logix-cli` is an engineering and diagnostic tool. Confirm the controller, tag and expected data type before transmitting writes. The implementation intentionally excludes arbitrary CIP messages, server mode, UDT write construction and I/O adapter behaviour.
