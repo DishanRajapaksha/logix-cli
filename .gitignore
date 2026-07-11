@@ -1,0 +1,5 @@
+logix-cli
+config.yaml
+*.out
+coverage.txt
+.DS_Store
