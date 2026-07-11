@@ -17,7 +17,7 @@ jobs:
         with:
           go-version: '1.23.x'
           cache: true
-      - run: go mod download
+      - run: go mod tidy
       - run: test -z "$(gofmt -l .)"
       - name: Validate
         shell: bash
@@ -38,4 +38,6 @@ jobs:
         if: always()
         with:
           name: ci-log
-          path: ci.log
+          path: |
+            ci.log
+            go.sum
