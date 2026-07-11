@@ -54,6 +54,81 @@ func (c *goLogixClient) Disconnect() error {
 	return nil
 }
 
+func (c *goLogixClient) Identity() (Identity, error) {
+	readUint16 := func(attribute gologix.CIPAttribute) (uint16, error) {
+		item, err := c.client.GetAttrSingle(gologix.CipObject_Identity, gologix.CIPInstance(1), attribute)
+		if err != nil {
+			return 0, err
+		}
+		return item.Uint16()
+	}
+	readUint32 := func(attribute gologix.CIPAttribute) (uint32, error) {
+		item, err := c.client.GetAttrSingle(gologix.CipObject_Identity, gologix.CIPInstance(1), attribute)
+		if err != nil {
+			return 0, err
+		}
+		return item.Uint32()
+	}
+
+	vendorID, err := readUint16(gologix.CIPAttribute(1))
+	if err != nil {
+		return Identity{}, identityError("vendor id", err)
+	}
+	deviceType, err := readUint16(gologix.CIPAttribute(2))
+	if err != nil {
+		return Identity{}, identityError("device type", err)
+	}
+	productCode, err := readUint16(gologix.CIPAttribute(3))
+	if err != nil {
+		return Identity{}, identityError("product code", err)
+	}
+	revisionItem, err := c.client.GetAttrSingle(gologix.CipObject_Identity, gologix.CIPInstance(1), gologix.CIPAttribute(4))
+	if err != nil {
+		return Identity{}, identityError("revision", err)
+	}
+	major, err := revisionItem.Byte()
+	if err != nil {
+		return Identity{}, identityError("revision major", err)
+	}
+	minor, err := revisionItem.Byte()
+	if err != nil {
+		return Identity{}, identityError("revision minor", err)
+	}
+	status, err := readUint16(gologix.CIPAttribute(5))
+	if err != nil {
+		return Identity{}, identityError("status", err)
+	}
+	serial, err := readUint32(gologix.CIPAttribute(6))
+	if err != nil {
+		return Identity{}, identityError("serial number", err)
+	}
+	nameItem, err := c.client.GetAttrSingle(gologix.CipObject_Identity, gologix.CIPInstance(1), gologix.CIPAttribute(7))
+	if err != nil {
+		return Identity{}, identityError("product name", err)
+	}
+	nameLength, err := nameItem.Byte()
+	if err != nil {
+		return Identity{}, identityError("product name length", err)
+	}
+	if len(nameItem.Rest()) < int(nameLength) {
+		return Identity{}, identityError("product name", fmt.Errorf("response declared %d bytes but contained %d", nameLength, len(nameItem.Rest())))
+	}
+
+	return Identity{
+		VendorID:     vendorID,
+		DeviceType:   deviceType,
+		ProductCode:  productCode,
+		Revision:     fmt.Sprintf("%d.%d", major, minor),
+		Status:       status,
+		SerialNumber: serial,
+		ProductName:  string(nameItem.Rest()[:nameLength]),
+	}, nil
+}
+
+func identityError(field string, err error) error {
+	return fmt.Errorf("%w: read identity %s: %v", ErrRequest, field, err)
+}
+
 func (c *goLogixClient) Programs() ([]Program, error) {
 	if err := c.client.ListAllPrograms(); err != nil {
 		return nil, fmt.Errorf("%w: list programs: %v", ErrRequest, err)
