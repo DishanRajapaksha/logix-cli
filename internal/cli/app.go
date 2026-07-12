@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/DishanRajapaksha/industrial-cli-kit/command"
 	"github.com/DishanRajapaksha/industrial-cli-kit/exitcode"
 	"github.com/DishanRajapaksha/logix-cli/internal/config"
 	"github.com/DishanRajapaksha/logix-cli/internal/logixclient"
@@ -221,82 +222,5 @@ Common flags:
 }
 
 func normaliseGlobalFlags(args []string) ([]string, error) {
-	if len(args) == 0 {
-		return args, nil
-	}
-	var globals []string
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if arg == "--" {
-			if i+1 >= len(args) {
-				return nil, errors.New("command is required after --")
-			}
-			return appendCommandGlobals(args[i+1:], globals), nil
-		}
-		if !strings.HasPrefix(arg, "-") || arg == "-" {
-			return appendCommandGlobals(args[i:], globals), nil
-		}
-		if arg == "--help" || arg == "-h" || arg == "--version" || arg == "-v" {
-			return args[i:], nil
-		}
-		name, inline, hasInline := strings.Cut(arg, "=")
-		switch name {
-		case "--verbose", "--debug":
-			if hasInline {
-				return nil, fmt.Errorf("%s does not take a value", name)
-			}
-			globals = append(globals, name)
-		case "--config", "--profile", "--address", "--port", "--path", "--timeout", "--format":
-			value := inline
-			if !hasInline {
-				i++
-				if i >= len(args) || strings.HasPrefix(args[i], "-") {
-					return nil, fmt.Errorf("%s requires a value", name)
-				}
-				value = args[i]
-			}
-			if value == "" && name != "--path" {
-				return nil, fmt.Errorf("%s requires a value", name)
-			}
-			globals = append(globals, name, value)
-		default:
-			return nil, fmt.Errorf("unknown global flag %q", name)
-		}
-	}
-	return nil, errors.New("command is required")
-}
-
-func appendCommandGlobals(args, globals []string) []string {
-	if len(args) == 0 || len(globals) == 0 || !commandSupportsGlobals(args[0]) {
-		return args
-	}
-	out := make([]string, 0, len(args)+len(globals))
-	out = append(out, args[0])
-	if commandTakesTag(args[0]) && len(args) > 1 && !strings.HasPrefix(args[1], "-") {
-		out = append(out, args[1])
-		out = append(out, globals...)
-		out = append(out, args[2:]...)
-		return out
-	}
-	out = append(out, globals...)
-	out = append(out, args[1:]...)
-	return out
-}
-
-func commandTakesTag(command string) bool {
-	switch command {
-	case "read", "write", "watch", "read-point", "write-point", "watch-point", "read-group", "write-group", "watch-group":
-		return true
-	default:
-		return false
-	}
-}
-
-func commandSupportsGlobals(command string) bool {
-	switch command {
-	case "validate-config", "test-connection", "status", "identify", "programs", "tags", "points", "groups", "read", "read-multi", "read-point", "read-group", "write", "write-multi", "write-point", "write-group", "watch", "watch-multi", "watch-point", "watch-group":
-		return true
-	default:
-		return false
-	}
+	return command.NormalizeGlobalFlagsForRegistry(args, cliRegistry)
 }
