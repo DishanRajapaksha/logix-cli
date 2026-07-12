@@ -5,7 +5,7 @@ import sharedhelp "github.com/DishanRajapaksha/industrial-cli-kit/help"
 func (a *App) writeRegistryUsage() {
 	_ = sharedhelp.Write(a.out, cliRegistry, sharedhelp.Options{
 		Description: "logix-cli is a script-friendly Rockwell Logix tag client over EtherNet/IP.",
-		Usage: []string{"logix-cli [global flags] <command> [flags]"},
+		Usage:       []string{"logix-cli [global flags] <command> [flags]"},
 		Examples: []string{
 			"logix-cli init-config",
 			"logix-cli test-connection --address 192.168.1.10",
