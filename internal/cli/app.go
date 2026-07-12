@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/DishanRajapaksha/industrial-cli-kit/exitcode"
 	"github.com/DishanRajapaksha/logix-cli/internal/config"
 	"github.com/DishanRajapaksha/logix-cli/internal/logixclient"
 	"github.com/DishanRajapaksha/logix-cli/internal/output"
@@ -16,14 +17,14 @@ import (
 
 const (
 	appName           = "logix-cli"
-	exitSuccess       = 0
-	exitGeneralError  = 1
-	exitConfigError   = 2
-	exitConnection    = 3
-	exitRequestError  = 4
-	exitWriteRejected = 7
-	exitTimeout       = 8
-	exitOutputError   = 9
+	exitSuccess       = int(exitcode.Success)
+	exitGeneralError  = int(exitcode.General)
+	exitConfigError   = int(exitcode.Config)
+	exitConnection    = int(exitcode.Connection)
+	exitRequestError  = int(exitcode.Request)
+	exitWriteRejected = int(exitcode.Rejected)
+	exitTimeout       = int(exitcode.Timeout)
+	exitOutputError   = int(exitcode.Output)
 )
 
 var errWriteRejected = errors.New("write rejected")

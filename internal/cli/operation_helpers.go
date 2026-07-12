@@ -4,12 +4,13 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/DishanRajapaksha/industrial-cli-kit/safety"
 	"github.com/DishanRajapaksha/logix-cli/internal/logixclient"
 )
 
 func validateWriteMode(yes, dryRun bool) error {
-	if yes && dryRun {
-		return fmt.Errorf("%w: --yes and --dry-run cannot be used together", logixclient.ErrValidation)
+	if _, err := safety.Resolve(yes, dryRun); err != nil {
+		return fmt.Errorf("%w: %v", logixclient.ErrValidation, err)
 	}
 	return nil
 }
