@@ -1,6 +1,9 @@
 name: Generate registry go.sum
 
 on:
+  push:
+    branches:
+      - agent/adopt-registry-parser
   pull_request:
 
 permissions:
