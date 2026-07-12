@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - agent/adopt-registry-help
+  pull_request:
 
 permissions:
   contents: write
