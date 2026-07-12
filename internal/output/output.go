@@ -1,114 +1,64 @@
 package output
 
 import (
-	"encoding/csv"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
-	"strings"
-	"text/tabwriter"
+
+	shared "github.com/DishanRajapaksha/industrial-cli-kit/output"
 )
 
-var ErrOutput = errors.New("output error")
+var ErrOutput = shared.ErrOutput
 
 func ValidateSnapshotFormat(format string) error {
-	switch strings.ToLower(format) {
-	case "table", "text", "json", "csv":
-		return nil
-	default:
-		return fmt.Errorf("%w: snapshot format must be table, text, json, or csv", ErrOutput)
+	if err := shared.ValidateSnapshotFormat(format); err != nil {
+		return fmt.Errorf("%w: %v", ErrOutput, err)
 	}
+	return nil
 }
 
 func ValidateStreamFormat(format string) error {
-	switch strings.ToLower(format) {
-	case "text", "jsonl", "csv":
-		return nil
-	default:
-		return fmt.Errorf("%w: stream format must be text, jsonl, or csv", ErrOutput)
+	if err := shared.ValidateStreamFormat(format); err != nil {
+		return fmt.Errorf("%w: %v", ErrOutput, err)
 	}
+	return nil
 }
 
 func Snapshot(w io.Writer, format string, headers []string, rows [][]string, value any) error {
-	if err := ValidateSnapshotFormat(format); err != nil {
-		return err
-	}
-	switch strings.ToLower(format) {
+	switch format {
 	case "json":
-		encoder := json.NewEncoder(w)
-		encoder.SetIndent("", "  ")
-		if err := encoder.Encode(value); err != nil {
-			return fmt.Errorf("%w: %v", ErrOutput, err)
-		}
+		return shared.WriteJSON(w, value)
 	case "csv":
-		writer := csv.NewWriter(w)
-		if err := writer.Write(headers); err != nil {
-			return fmt.Errorf("%w: %v", ErrOutput, err)
-		}
-		for _, row := range rows {
-			if err := writer.Write(row); err != nil {
-				return fmt.Errorf("%w: %v", ErrOutput, err)
-			}
-		}
-		writer.Flush()
-		if err := writer.Error(); err != nil {
-			return fmt.Errorf("%w: %v", ErrOutput, err)
-		}
+		return shared.WriteCSV(w, headers, rows)
 	case "table":
-		writer := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
-		fmt.Fprintln(writer, strings.Join(headers, "\t"))
-		for _, row := range rows {
-			fmt.Fprintln(writer, strings.Join(row, "\t"))
-		}
-		if err := writer.Flush(); err != nil {
-			return fmt.Errorf("%w: %v", ErrOutput, err)
-		}
+		return shared.WriteTable(w, headers, rows)
 	case "text":
 		for _, row := range rows {
-			fmt.Fprintln(w, strings.Join(row, "\t"))
+			if err := shared.WriteText(w, join(row)); err != nil {
+				return err
+			}
 		}
+		return nil
+	default:
+		return ValidateSnapshotFormat(format)
 	}
-	return nil
 }
 
-type Stream struct {
-	w           io.Writer
-	format      string
-	header      []string
-	wroteHeader bool
-}
+type Stream = shared.Stream
 
 func NewStream(w io.Writer, format string, header []string) (*Stream, error) {
-	if err := ValidateStreamFormat(format); err != nil {
-		return nil, err
+	stream, err := shared.NewStream(w, format, header)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrOutput, err)
 	}
-	return &Stream{w: w, format: strings.ToLower(format), header: header}, nil
+	return stream, nil
 }
-
-func (s *Stream) Write(row []string, value any) error {
-	switch s.format {
-	case "jsonl":
-		if err := json.NewEncoder(s.w).Encode(value); err != nil {
-			return fmt.Errorf("%w: %v", ErrOutput, err)
-		}
-	case "csv":
-		writer := csv.NewWriter(s.w)
-		if !s.wroteHeader {
-			if err := writer.Write(s.header); err != nil {
-				return fmt.Errorf("%w: %v", ErrOutput, err)
-			}
-			s.wroteHeader = true
-		}
-		if err := writer.Write(row); err != nil {
-			return fmt.Errorf("%w: %v", ErrOutput, err)
-		}
-		writer.Flush()
-		if err := writer.Error(); err != nil {
-			return fmt.Errorf("%w: %v", ErrOutput, err)
-		}
-	case "text":
-		fmt.Fprintln(s.w, strings.Join(row, "\t"))
+func join(row []string) string {
+	if len(row) == 0 {
+		return ""
 	}
-	return nil
+	value := row[0]
+	for _, part := range row[1:] {
+		value += "\t" + part
+	}
+	return value
 }

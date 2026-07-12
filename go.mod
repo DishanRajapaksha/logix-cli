@@ -3,6 +3,7 @@ module github.com/DishanRajapaksha/logix-cli
 go 1.23
 
 require (
+	github.com/DishanRajapaksha/industrial-cli-kit v0.1.0
 	github.com/danomagnum/gologix v0.41.0-beta
 	gopkg.in/yaml.v3 v3.0.1
 )
