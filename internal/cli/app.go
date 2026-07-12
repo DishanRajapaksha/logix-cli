@@ -156,69 +156,7 @@ func (a *App) newFlagSet(name string) *flag.FlagSet {
 }
 
 func (a *App) printUsage() {
-	fmt.Fprintln(a.out, `logix-cli is a script-friendly Rockwell Logix tag client over EtherNet/IP.
-
-Usage:
-  logix-cli [global flags] <command> [flags]
-  logix-cli init-config
-  logix-cli validate-config --profile local
-  logix-cli test-connection --address 192.168.1.10
-  logix-cli status --format json
-  logix-cli identify
-  logix-cli programs --format json
-  logix-cli tags --filter Motor --limit 50
-  logix-cli points --format json
-  logix-cli groups --format json
-  logix-cli read Motor.Speed --type real
-  logix-cli read-multi --item Motor.Speed=real --item Counter=dint
-  logix-cli read-point motor_speed
-  logix-cli read-group motor --format json
-  logix-cli write Motor.Enable --type bool --value true --yes
-  logix-cli write-multi --set Motor.Enable=bool:true --set Recipe=dint:12 --yes
-  logix-cli write-point motor_enabled --value true --yes
-  logix-cli write-group motor --set motor_enabled=true --yes
-  logix-cli watch Motor.Speed --type real --interval 1s --duration 30s --format jsonl
-  logix-cli watch-multi --item Motor.Speed=real --item Counter=dint --format jsonl
-  logix-cli watch-point motor_speed --duration 30s --format jsonl
-  logix-cli watch-group motor --duration 30s --format jsonl
-  logix-cli completions zsh
-  logix-cli version
-
-Commands:
-  init-config       Write a starter YAML config file
-  validate-config  Validate local config without connecting
-  test-connection  Open and close a CIP connection
-  status           Read controller product, revision, and Identity status
-  identify         Read the complete CIP Identity object
-  programs         List controller programs
-  tags             List controller and program-scoped tags
-  points           List configured named points
-  groups           List configured point groups
-  read             Read one tag, with optional type detection
-  read-multi       Read several typed tags over one connection
-  read-point       Read a configured named point
-  read-group       Read all points in a configured group
-  write            Write one tag; dry-run unless --yes is supplied
-  write-multi      Write several typed tags; dry-run unless --yes is supplied
-  write-point      Write a configured named point; dry-run unless --yes is supplied
-  write-group      Write selected writable points in a configured group
-  watch            Poll one tag repeatedly
-  watch-multi      Poll several typed tags repeatedly
-  watch-point      Poll a configured named point repeatedly
-  watch-group      Poll all points in a configured group
-  completions      Generate Bash or Zsh completion scripts
-  version          Print version information
-
-Common flags:
-  --config    YAML config file, defaults to config.yaml
-  --profile   Config profile name
-  --address   Controller IPv4 address
-  --port      EtherNet/IP port, defaults to 44818
-  --path      CIP route path, such as 1,0; empty for Micro800 devices
-  --timeout   Socket timeout
-  --format    snapshots: table, text, json, csv; streams: text, jsonl, csv
-  --verbose   Print high-level connection decisions
-  --debug     Enable lower-level client diagnostics`)
+	a.writeRegistryUsage()
 }
 
 func normaliseGlobalFlags(args []string) ([]string, error) {
